@@ -5,7 +5,6 @@ import (
 )
 
 type Node struct {
-	send   chan bool
 	sense  bool
 	parity int
 	id     int
@@ -17,7 +16,7 @@ func pow2(n int) int {
 }
 
 func ceil_log2(n int) int {
-	res := 31 - bits.TrailingZeros32(uint32(n))
+	res := 63 - bits.LeadingZeros(uint(n))
 	if (1 << res) != n {
 		res++
 	}
@@ -33,11 +32,11 @@ func Init(threads int) *NodeCollection {
 	collection := &NodeCollection{Nodes: make([]*Node, threads)}
 
 	for i := 0; i < threads; i++ {
-		node := &Node{parity: 0, sense: true, id: i, send: make(chan bool), flags: make([][]bool, 2)}
+		node := &Node{parity: 0, sense: true, id: i, flags: make([][]bool, 2)}
 		node.flags[0] = make([]bool, ceil_log2(threads))
 		node.flags[1] = make([]bool, ceil_log2(threads))
 
-		collection.Nodes = append(collection.Nodes, node)
+		collection.Nodes[i] = node
 	}
 
 	return collection
@@ -52,10 +51,11 @@ func (coll *NodeCollection) Barrier(current int) {
 
 	for i := 0; i < rounds; i++ {
 		sent_to := (current + pow2(i)) % threads
-		sent_from := (current + threads - pow2(i)) % threads
 
-		coll.Nodes[sent_to].send <- node.sense
-		node.flags[node.parity][i] = <-coll.Nodes[sent_from].send
+		coll.Nodes[sent_to].flags[node.parity][i] = node.sense
+
+		for node.flags[node.parity][i] != node.sense {
+		}
 	}
 
 	if node.parity == 1 {
